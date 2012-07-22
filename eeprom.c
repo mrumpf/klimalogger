@@ -15,8 +15,7 @@
  * read_data reads data from the WS2300 based on a given address,
  * number of data read, and a an already open serial port
  *
- * Inputs:  serdevice - device number of the already open serial port
- *          number - number of bytes to read, max value 15
+ * Inputs:  number - number of bytes to read, max value 15
  *
  * Output:  readdata - pointer to an array of chars containing
  *                     the just read data, not zero terminated
@@ -24,26 +23,26 @@
  * Returns: number of bytes read, -1 if failed
  *
  ********************************************************************/
-int eeprom_read(WEATHERSTATION ws, unsigned char *buf, size_t count) {
+int eeprom_read(unsigned char *buf, size_t count) {
   unsigned char command = 0xa1;
   int i;
 
-  if (!write_byte(ws,command))
+  if (!write_byte(command))
     return -1;
 
   for (i = 0; i < count; i++) {
-    buf[i] = read_byte(ws);
+    buf[i] = read_byte();
     if (i + 1 < count)
-      read_next_byte_seq(ws);
+      read_next_byte_seq();
     //printf("%i\n",readdata[i]);
   }
 
-  read_last_byte_seq(ws);
+  read_last_byte_seq();
   return i;
 }
 
-int eeprom_seek(WEATHERSTATION ws, off_t pos) {
-  return write_data(ws, pos, 0, NULL);
+int eeprom_seek(off_t pos) {
+  return write_data(pos, 0, NULL);
 }
 
 
@@ -51,8 +50,7 @@ int eeprom_seek(WEATHERSTATION ws, off_t pos) {
  * write_data writes data to the WS2300.
  * It can both write nibbles and set/unset bits
  *
- * Inputs:      ws2300 - device number of the already open serial port
- *              address (interger - 16 bit)
+ * Inputs:      address (interger - 16 bit)
  *              number - number of nibbles to be written/changed
  *                       must 1 for bit modes (SETBIT and UNSETBIT)
  *                       max 80 for nibble mode (WRITENIB)
@@ -68,56 +66,56 @@ int eeprom_seek(WEATHERSTATION ws, off_t pos) {
  * Returns:     number of bytes written, -1 if failed
  *
  ********************************************************************/
-int write_data(WEATHERSTATION ws, int address, int number, unsigned char *writedata) {
+int write_data(int address, int number, unsigned char *writedata) {
   unsigned char command = 0xa0;
   int i = -1;
   
-  write_byte(ws,command);
-  write_byte(ws,address/256);
-  write_byte(ws,address%256);
+  write_byte(command);
+  write_byte(address/256);
+  write_byte(address%256);
   
   if (writedata!=NULL) {
     for (i = 0; i < number; i++)
     {
-      write_byte(ws,writedata[i]);
+      write_byte(writedata[i]);
     }
   }
   
-  set_DTR(ws,0);
+  set_DTR(0);
   nanodelay();
-  set_RTS(ws,0);
+  set_RTS(0);
   nanodelay();
-  set_RTS(ws,1);
+  set_RTS(1);
   nanodelay();
-  set_DTR(ws,1);
+  set_DTR(1);
   nanodelay();
-  set_RTS(ws,0);
+  set_RTS(0);
   nanodelay();
   
 //return -1 for errors
   return i;
 }
 
-void read_next_byte_seq(WEATHERSTATION ws) {
+void read_next_byte_seq() {
   print_log(3,"read_next_byte_seq");
-  write_bit(ws,0);
-  set_RTS(ws,0);
+  write_bit(0);
+  set_RTS(0);
   nanodelay();
 }
 
-void read_last_byte_seq(WEATHERSTATION ws) {
+void read_last_byte_seq() {
   print_log(3,"read_last_byte_seq");
-  set_RTS(ws,1);
+  set_RTS(1);
   nanodelay();
-  set_DTR(ws,0);
+  set_DTR(0);
   nanodelay();
-  set_RTS(ws,0);
+  set_RTS(0);
   nanodelay();
-  set_RTS(ws,1);
+  set_RTS(1);
   nanodelay();
-  set_DTR(ws,1);
+  set_DTR(1);
   nanodelay();
-  set_RTS(ws,0);
+  set_RTS(0);
   nanodelay();
 }
 
@@ -125,21 +123,19 @@ void read_last_byte_seq(WEATHERSTATION ws) {
  * read_bit  
  * Reads one bit from the COM
  *
- * Inputs:  serdevice - opened file handle
- * 
  * Returns: bit read from the COM
  *
  ********************************************************************/
 
-int read_bit(WEATHERSTATION ws) {
+int read_bit() {
   int bit_value;
   char str[20];
   
-  set_DTR(ws,0);
+  set_DTR(0);
   nanodelay();
-  bit_value = get_CTS(ws);
+  bit_value = get_CTS();
   nanodelay();
-  set_DTR(ws,1);
+  set_DTR(1);
   nanodelay();
   sprintf(str,"Read bit %i",!bit_value);
   print_log(4,str);
@@ -151,20 +147,19 @@ int read_bit(WEATHERSTATION ws) {
  * write_bit  
  * Writes one bit to the COM
  *
- * Inputs:  serdevice - opened file handle
- *          bit - bit to write 
+ * Inputs:  bit - bit to write 
  * 
  * Returns: nothing
  *
  ********************************************************************/
-void write_bit(WEATHERSTATION ws,int bit) {
+void write_bit(int bit) {
   char str[20];
   
-  set_RTS(ws,!bit);
+  set_RTS(!bit);
   nanodelay();
-  set_DTR(ws,0);
+  set_DTR(0);
   nanodelay();
-  set_DTR(ws,1);
+  set_DTR(1);
 	
   sprintf(str,"Write bit %i",bit);
   print_log(4,str);
@@ -176,12 +171,10 @@ void write_bit(WEATHERSTATION ws,int bit) {
  * read_byte  
  * Reads one byte from the COM
  *
- * Inputs:  serdevice - opened file handle
- * 
  * Returns: byte read from the COM
  *
  ********************************************************************/
-int read_byte(WEATHERSTATION ws) {
+int read_byte() {
   int byte = 0;
   int i;
   char str[20];
@@ -189,7 +182,7 @@ int read_byte(WEATHERSTATION ws) {
   for (i = 0; i < 8; i++)
   {
     byte *= 2;
-    byte += read_bit(ws);
+    byte += read_bit();
   }
   sprintf(str,"Read byte %i",byte);
   print_log(3,str);
@@ -201,13 +194,12 @@ int read_byte(WEATHERSTATION ws) {
  * write_byte  
  * Writes one byte to the COM
  *
- * Inputs:  serdevice - opened file handle
- *          byte - byte to write 
+ * Inputs:  byte - byte to write 
  * 
  * Returns: nothing
  *
  ********************************************************************/
-int write_byte(WEATHERSTATION ws, int byte) {
+int write_byte(int byte) {
   int status;
   int i;
   char str[20];
@@ -217,19 +209,19 @@ int write_byte(WEATHERSTATION ws, int byte) {
 
   for (i = 0; i < 8; i++)
   {
-    write_bit(ws, byte & 0x80);
+    write_bit(byte & 0x80);
     byte <<= 1;
     byte &= 0xff;
   }
 
-  set_RTS(ws,0);
+  set_RTS(0);
   nanodelay();
-  status = get_CTS(ws);
+  status = get_CTS();
   //TODO: checking value of status, error routine
   nanodelay();
-  set_DTR(ws,0);
+  set_DTR(0);
   nanodelay();
-  set_DTR(ws,1);
+  set_DTR(1);
   nanodelay();
   if (status)
     return 1;
@@ -241,6 +233,6 @@ int write_byte(WEATHERSTATION ws, int byte) {
  * log
  ********************************************************************/
 void print_log(int log_level, char* str) {
-  if (log_level < 0)
+//  if (log_level < 0)
     fprintf(stderr,"%s\n",str);
 }

@@ -13,121 +13,86 @@
 #define DEBUG 0
 
 #include "eeprom.h"
-#include "mcdelay.h"
-#include "mcdelay.c"
+
+#define TxD RPI_GPIO_P1_11
+#define DTR RPI_GPIO_P1_18
+#define RTS RPI_GPIO_P1_16
+#define DSR RPI_GPIO_P1_13
+#define CTS RPI_GPIO_P1_15
 
 /********************************************************************
  * open_weatherstation, Windows version
  *
- * Input:   devicename (COM1, COM2 etc)
- * 
- * Returns: Handle to the weatherstation (type WEATHERSTATION)
- *
  ********************************************************************/
-WEATHERSTATION open_weatherstation (char *device) {
-  WEATHERSTATION ws;
-  struct termios adtio;
-  unsigned char buffer[BUFFER_SIZE];
+void open_weatherstation () {
   long i;
   print_log(1,"open_weatherstation");
 
-  //calibrate nanodelay function
-  microdelay_init(1);
+//  bcm2835_set_debug(1);
 
-  //Setup serial port
-  if ((ws = open(device, O_RDWR | O_NOCTTY)) < 0)
+  if (!bcm2835_init())
   {
-    printf("\nUnable to open serial device %s\n", device);
+    printf("\nUnable to open bcm2835 library\n");
     exit(EXIT_FAILURE);
   }
 
-  if ( flock(ws, LOCK_EX) < 0 ) {
-    perror("\nSerial device is locked by other program\n");
-    exit(EXIT_FAILURE);
+  // set input and outputs
+  bcm2835_gpio_fsel(TxD, BCM2835_GPIO_FSEL_OUTP);
+  bcm2835_gpio_fsel(DTR, BCM2835_GPIO_FSEL_OUTP);
+  bcm2835_gpio_fsel(RTS, BCM2835_GPIO_FSEL_OUTP);
+  bcm2835_gpio_fsel(DSR, BCM2835_GPIO_FSEL_INPT);
+  bcm2835_gpio_fsel(CTS, BCM2835_GPIO_FSEL_INPT);
+
+
+  printf ("Try to takeover the bus...\n");
+  for (i = 0; i < 4*448; i++) {
+    // 'U' / 0101 0101 -> TxD (300Baud)
+    bcm2835_gpio_write(TxD, LOW);
+    delay(3);
+    bcm2835_gpio_write(TxD, HIGH);
+    delay(3);
   }
-  //We want full control of what is set and simply reset the entire adtio struct
-  memset(&adtio, 0, sizeof(adtio));
-  // Serial control options
-  adtio.c_cflag &= ~PARENB;      // No parity
-  adtio.c_cflag &= ~CSTOPB;      // One stop bit
-  adtio.c_cflag &= ~CSIZE;       // Character size mask
-  adtio.c_cflag |= CS8;          // Character size 8 bits
-  adtio.c_cflag |= CREAD;        // Enable Receiver
-  //adtio.c_cflag &= ~CREAD;        // Disable Receiver
-  adtio.c_cflag &= ~HUPCL;       // No "hangup"
-  adtio.c_cflag &= ~CRTSCTS;     // No flowcontrol
-  adtio.c_cflag |= CLOCAL;       // Ignore modem control lines
 
-  // Baudrate, for newer systems
-  cfsetispeed(&adtio, BAUDRATE);
-  cfsetospeed(&adtio, BAUDRATE);	
-
-  // Serial local options: adtio.c_lflag
-  // Raw input = clear ICANON, ECHO, ECHOE, and ISIG
-  // Disable misc other local features = clear FLUSHO, NOFLSH, TOSTOP, PENDIN, and IEXTEN
-  // So we actually clear all flags in adtio.c_lflag
-  adtio.c_lflag = 0;
-
-  // Serial input options: adtio.c_iflag
-  // Disable parity check = clear INPCK, PARMRK, and ISTRIP 
-  // Disable software flow control = clear IXON, IXOFF, and IXANY
-  // Disable any translation of CR and LF = clear INLCR, IGNCR, and ICRNL	
-  // Ignore break condition on input = set IGNBRK
-  // Ignore parity errors just in case = set IGNPAR;
-  // So we can clear all flags except IGNBRK and IGNPAR
-  adtio.c_iflag = IGNBRK|IGNPAR;
-
-  // Serial output options
-  // Raw output should disable all other output options
-  adtio.c_oflag &= ~OPOST;
-
-  adtio.c_cc[VTIME] = 10;		// timer 1s
-  adtio.c_cc[VMIN] = 0;		// blocking read until 1 char
-
-  if (tcsetattr(ws, TCSANOW, &adtio) < 0)
-  {
-	  printf("Unable to initialize serial device");
-	  exit(0);
-  }
-  tcflush(ws, TCIOFLUSH);
-  
-  for (i = 0; i < 448; i++) {
-    buffer[i] = 'U';
-  }
-  write(ws, buffer, 448);
-
-  set_DTR(ws,0);
-  set_RTS(ws,0);
+  set_DTR(0);
+  set_RTS(0);
   i = 0;
   do {
-    sleep_short(10);
+    delay(10);
     i++;
-  } while (i < INIT_WAIT && !get_DSR(ws));
+  } while (i < INIT_WAIT && !get_DSR());
 
   if (i == INIT_WAIT)
   {
     print_log(2,"Connection timeout 1");
     printf ("Connection timeout\n");
-    close_weatherstation(ws);
+    close_weatherstation();
     exit(0);
   }
   i = 0;
   do {
-    sleep_short(10);
+    delay(10);
     i++;
-  } while (i < INIT_WAIT && get_DSR(ws));
+  } while (i < INIT_WAIT && get_DSR());
 
   if (i != INIT_WAIT) {
-    set_RTS(ws,1);
-    set_DTR(ws,1);
+    set_RTS(1);
+    set_DTR(1);
   } else {
     print_log(2,"Connection timeout 2");
     printf ("Connection timeout\n");
-    close_weatherstation(ws);
+    close_weatherstation();
     exit(0);
   }
-  write(ws, buffer, 448);
-  return ws;
+
+  printf ("Takeover the bus...\n");
+  for (i = 0; i < 4*448; i++) {
+    // 'U' / 0101 0101 -> TxD (300Baud)
+    bcm2835_gpio_write(TxD, LOW);
+    delay(3);
+    bcm2835_gpio_write(TxD, HIGH);
+    delay(3);
+  }
+  printf ("...done!\n");
 }
 
 
@@ -136,157 +101,74 @@ WEATHERSTATION open_weatherstation (char *device) {
  *
  * Input: Handle to the weatherstation (type WEATHERSTATION)
  *
- * Returns nothing
+ * Returns: 1 if close was successful, 0 otherwise
  *
  ********************************************************************/
-void close_weatherstation(WEATHERSTATION ws)
+int close_weatherstation()
 {
-  tcflush(ws,TCIOFLUSH);
-  close(ws);
-  return;
+  return bcm2835_close();
 }
 
 /********************************************************************
  * set_DTR  
  * Sets or resets DTR signal
  *
- * Inputs:  serdevice - opened file handle
- *          val - value to set 
+ * Inputs:  val - value to set 
  * 
  * Returns nothing
  *
  ********************************************************************/
 
-void set_DTR(WEATHERSTATION ws, int val)
+void set_DTR(int val)
 {
-  //TODO: use TIOCMBIC and TIOCMBIS instead of TIOCMGET and TIOCMSET
-  int portstatus;
-  ioctl(ws, TIOCMGET, &portstatus);	// get current port status
-  if (val)
-  {
-    print_log(5,"Set DTR");
-    portstatus |= TIOCM_DTR;
-  }
-  else
-  {
-    print_log(5,"Clear DTR");
-    portstatus &= ~TIOCM_DTR;
-  }
-  ioctl(ws, TIOCMSET, &portstatus);	// set current port status
-  
-  /*if (val)
-    ioctl(ws, TIOCMBIS, TIOCM_DTR);
-  else
-    ioctl(ws, TIOCMBIC, TIOCM_DTR);*/
+  bcm2835_gpio_write(DTR, val == 1 ? HIGH : LOW );
 }
 
 /********************************************************************
  * set_RTS  
  * Sets or resets RTS signal
  *
- * Inputs:  serdevice - opened file handle,
- *          val - value to set 
+ * Inputs:  val - value to set 
  * 
  * Returns nothing
  *
  ********************************************************************/
 
-void set_RTS(WEATHERSTATION ws, int val)
+void set_RTS(int val)
 {
-  //TODO: use TIOCMBIC and TIOCMBIS instead of TIOCMGET and TIOCMSET
-  int portstatus;
-  ioctl(ws, TIOCMGET, &portstatus);	// get current port status
-  if (val)
-  {
-    print_log(5,"Set RTS");
-    portstatus |= TIOCM_RTS;
-  }
-  else
-  {
-    print_log(5,"Clear RTS");
-    portstatus &= ~TIOCM_RTS;
-  }
-  ioctl(ws, TIOCMSET, &portstatus);	// set current port status
-  
-  /*if (val)
-    ioctl(ws, TIOCMBIS, TIOCM_RTS);
-  else
-    ioctl(ws, TIOCMBIC, TIOCM_RTS);
-  */
-  
+  bcm2835_gpio_write(RTS, val == 1 ? HIGH : LOW );
 }
 
 /********************************************************************
  * get_DSR  
  * Checks status of DSR signal
  *
- * Inputs:  ws - opened file handle
- *          
- * 
  * Returns: status of DSR signal
  *
  ********************************************************************/
 
-int get_DSR(WEATHERSTATION ws)
+int get_DSR()
 {
-  int portstatus;
-  ioctl(ws, TIOCMGET, &portstatus);	// get current port status
-
-  if (portstatus & TIOCM_DSR)
-  {
-    print_log(5,"Got DSR = 1");
-    return 1;
-  }
-  else
-  {
-    print_log(5,"Got DSR = 0");
-    return 0;
-  }
+  uint8_t value = bcm2835_gpio_lev(DSR);
+  return value;
 }
 
 /********************************************************************
  * get_CTS
  * Checks status of CTS signal
  *
- * Inputs:  ws - opened file handle
- *          
- * 
  * Returns: status of CTS signal
  *
  ********************************************************************/
 
-int get_CTS(WEATHERSTATION ws)
+int get_CTS()
 {
-  int portstatus;
-  ioctl(ws, TIOCMGET, &portstatus);	// get current port status
-
-  if (portstatus & TIOCM_CTS)
-  {
-    print_log(5,"Got CTS = 1");
-    return 1;
-  }
-  else
-  {
-    print_log(5,"Got CTS = 0");
-    return 0;
-  }
-}
-
-/********************************************************************
- * sleep_short - Linux version
- * 
- * Inputs: Time in milliseconds (integer)
- *
- * Returns: nothing
- *
- ********************************************************************/
-void sleep_short(int milliseconds)
-{
-	usleep(milliseconds * 1000);
+  uint8_t value = bcm2835_gpio_lev(CTS);
+  return value;
 }
 
 /* Note: if you see timing issues, maybe you need to adjust this ... */
 void nanodelay() {
-	microdelay(10);
+	delayMicroseconds(10);
 }
 
