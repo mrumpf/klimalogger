@@ -8,14 +8,12 @@
 #define BUFSIZE 32768
 
 void print_usage() {
-	fprintf(stderr, "Usage: realtime /dev/ttyS0\n");
+	fprintf(stderr, "Usage: realtime\n");
 	exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[]) {
-	WEATHERSTATION ws;
 	unsigned char data[BUFSIZE];
-	char* serial_device;
 
 	int sensors;
 	int block_size = 0;
@@ -32,13 +30,10 @@ int main(int argc, char *argv[]) {
 
 	memset(data, 0xAA, BUFSIZE);
 
-	if (argc != 2) {
-		fprintf(stderr, "E: no serial device specified.\n");
+	if (argc != 1) {
 		print_usage();
 	}
 
-	serial_device = argv[1];
-	
 	// need root for (timing) portio
 	if (geteuid() != 0) {
 		fprintf(stderr, "E: this program needs root privileges to do direct port I/O.\n");
@@ -54,12 +49,12 @@ int main(int argc, char *argv[]) {
 
 
 	// Setup serial port
-	ws = open_weatherstation(serial_device);
+	open_weatherstation();
 
 	// read config
 	nanodelay();
-	eeprom_seek(ws, 0);
-	eeprom_read(ws, data, data_offset);
+	eeprom_seek(0);
+	eeprom_read(data, data_offset);
 	
 	// config check
 	sensors = data[0x0C];
@@ -82,8 +77,8 @@ int main(int argc, char *argv[]) {
 	start_adr = data_offset;
 	while(start_adr < (data_offset + block_size*50)) {
 		int read_len = (2*block_size);
-		eeprom_seek(ws, start_adr);
-		eeprom_read(ws, data + start_adr, read_len);
+		eeprom_seek(start_adr);
+		eeprom_read(data + start_adr, read_len);
 		record_parse(data+data_offset, &r, sensors);
 		record_parse(data+data_offset+block_size, &rnext, sensors);
 		record_interval = rnext.time_m - r.time_m;
@@ -133,8 +128,8 @@ int main(int argc, char *argv[]) {
 
 		// now read from guessed record position
 		skip_offset = data_offset + skip*block_size;
-		eeprom_seek(ws, skip_offset);
-		eeprom_read(ws, data+skip_offset, block_size*2);
+		eeprom_seek(skip_offset);
+		eeprom_read(data+skip_offset, block_size*2);
 
 		record_parse(data+skip_offset, &r, sensors);
 
@@ -143,7 +138,7 @@ int main(int argc, char *argv[]) {
 		printf("\n");
 	}
 
-	close_weatherstation(ws);
+	close_weatherstation();
 	return(0);
 }
 

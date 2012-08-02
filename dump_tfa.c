@@ -18,12 +18,11 @@
 #define BUFSIZE 32768
 
 void print_usage() {
-	fprintf(stderr, "Usage: dump_tfa /dev/ttyS0 <dumpfile>\n");
+	fprintf(stderr, "Usage: dump_tfa <dumpfile>\n");
 	exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[]) {
-	WEATHERSTATION ws;
 	FILE *fileptr;
 	unsigned char data[BUFSIZE];
 
@@ -31,14 +30,11 @@ int main(int argc, char *argv[]) {
 	int block_len = 1000;
 	int retries = 0;
 	char* filename;
-	char* serial_device;
 
-	if (argc != 2 && argc != 3) {
-		fprintf(stderr, "E: no serial device specified.\n");
+	if (argc != 2) {
+		fprintf(stderr, "E: no dump file specified.\n");
 		print_usage();
 	}
-
-	serial_device = argv[1];
 
 	if (argc >= 3) {
 		filename = argv[2];
@@ -63,8 +59,8 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	// Setup serial port
-	ws = open_weatherstation(serial_device);
+	// Setup 
+	open_weatherstation();
 
 	// Setup file
 	fileptr = fopen(filename, "w");
@@ -88,14 +84,14 @@ int main(int argc, char *argv[]) {
 		printf("   ... reading %d bytes beginning from %d\n", this_len, start_adr);
 
 		nanodelay();
-		eeprom_seek(ws, start_adr);
-		got_len = eeprom_read(ws, data+start_adr, this_len);
+		eeprom_seek(start_adr);
+		got_len = eeprom_read(data+start_adr, this_len);
 		if (got_len != this_len) {
 			if (got_len == -1 && retries < MAX_RETRIES) {
 				retries++;
 				fprintf(stderr, "W: eeprom ack failed, retrying read (retries left: %d).\n", MAX_RETRIES-retries);
-				close_weatherstation(ws);
-				ws = open_weatherstation("/dev/ttyS0");
+				close_weatherstation();
+				open_weatherstation();
 				continue;
 			}
 			printf("   >>> got     %d bytes\n", got_len);
@@ -109,7 +105,7 @@ int main(int argc, char *argv[]) {
 
 	fwrite(data, len, 1, fileptr);
 
-	close_weatherstation(ws);
+	close_weatherstation();
 	fclose(fileptr);
 	return(0);
 }

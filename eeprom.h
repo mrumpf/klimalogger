@@ -13,42 +13,43 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <bcm2835.h>
 
 #define MAXRETRIES          20
 
 
 /* Generic functions */
 
-int eeprom_read(WEATHERSTATION ws, unsigned char *buf, size_t count);
-int eeprom_seek(WEATHERSTATION ws, off_t pos);
+int eeprom_read(unsigned char *buf, size_t count);
+int eeprom_seek(off_t pos);
 
 
 
-WEATHERSTATION open_weatherstation(char *device);
+void open_weatherstation();
 
-void close_weatherstation(WEATHERSTATION ws);
+int close_weatherstation();
 
-int read_data(WEATHERSTATION ws, int number,
+int read_data(int number,
 			  unsigned char *readdata);
 			  
-int write_data(WEATHERSTATION ws, int address, int number,
+int write_data(int address, int number,
 			   unsigned char *writedata);
 
 
-void read_next_byte_seq(WEATHERSTATION ws);
-void read_last_byte_seq(WEATHERSTATION ws);
+void read_next_byte_seq();
+void read_last_byte_seq();
 
-int read_bit(WEATHERSTATION ws);
-void write_bit(WEATHERSTATION ws,int bit);
-int read_byte(WEATHERSTATION ws);
-int write_byte(WEATHERSTATION ws,int byte);
+int read_bit();
+void write_bit(int bit);
+int read_byte();
+int write_byte(int byte);
 void print_log(int log_level, char* str);
 
 void sleep_short(int milliseconds);
-void set_DTR(WEATHERSTATION ws, int val);
-void set_RTS(WEATHERSTATION ws, int val);
-int get_DSR(WEATHERSTATION ws);
-int get_CTS(WEATHERSTATION ws);
+void set_DTR(int val);
+void set_RTS(int val);
+int get_DSR();
+int get_CTS();
 long calibrate();
 void nanodelay();
 #endif /* _INCLUDE_RW3600_H_ */
